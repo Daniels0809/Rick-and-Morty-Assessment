@@ -2,12 +2,15 @@
 
 import { useState } from 'react';
 
+import { useRouter } from 'next/navigation';
+
 interface LoginForm {
   email: string;
   password: string;
 }
 
 export default function LoginPage() {
+  const router = useRouter();
   const [form, setForm] = useState<LoginForm>({
     email: '',
     password: '',
@@ -26,50 +29,96 @@ export default function LoginPage() {
     e.preventDefault();
     setError(null);
 
-    // Simulación de validación básica
+    // Validation
     if (!form.email || !form.password) {
       setError('Todos los campos son obligatorios');
       return;
     }
 
-    console.warn('Login simulado:', form);
+    // 1. Check Hardcoded Admin
+    if (form.email === 'admin@admin.com' && form.password === '123') {
+      localStorage.setItem('isAuthenticated', 'true');
+      localStorage.setItem('currentUser', JSON.stringify({ name: 'Admin Rick', email: 'admin@admin.com' }));
+      router.push('/dashboard');
+      return;
+    }
+
+    // 2. Check Registered Users from LocalStorage
+    const storedUsers = localStorage.getItem('registeredUsers');
+    const users = storedUsers ? JSON.parse(storedUsers) : [];
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const foundUser = users.find((u: any) => u.email === form.email && u.password === form.password);
+
+    if (foundUser) {
+      localStorage.setItem('isAuthenticated', 'true');
+      localStorage.setItem('currentUser', JSON.stringify(foundUser));
+      router.push('/dashboard');
+      return;
+    }
+
+    // 3. Invalid
+    setError('Invalid coordinates or passcode. Access denied.');
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-sm space-y-4 border p-6 rounded"
-      >
-        <h1 className="text-xl font-semibold">Iniciar sesión</h1>
+    <div className="auth-container">
+      <div className="portal-bg absolute inset-0 z-0"></div>
 
-        {error && <p className="text-sm text-red-500">{error}</p>}
+      <div className="auth-box">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)]">
+            Access Portal
+          </h1>
+          <p className="text-muted mt-2 text-sm">Identify yourself, dirtbag.</p>
+        </div>
 
-        <input
-          type="email"
-          name="email"
-          placeholder="Correo electrónico"
-          value={form.email}
-          onChange={handleChange}
-          className="w-full border px-3 py-2 rounded"
-        />
+        {error && (
+          <div className="alert alert-danger text-sm font-bold mb-6 animate-pulse" role="alert">
+            🛑 {error}
+          </div>
+        )}
 
-        <input
-          type="password"
-          name="password"
-          placeholder="Contraseña"
-          value={form.password}
-          onChange={handleChange}
-          className="w-full border px-3 py-2 rounded"
-        />
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <div>
+            <label className="block text-sm font-medium text-[var(--secondary)] mb-1">Email Coordinates</label>
+            <input
+              type="email"
+              name="email"
+              placeholder="C-137@citadel.com"
+              value={form.email}
+              onChange={handleChange}
+              className="form-control"
+            />
+          </div>
 
-        <button
-          type="submit"
-          className="w-full bg-black text-white py-2 rounded"
-        >
-          Ingresar
-        </button>
-      </form>
-    </main>
+          <div>
+            <label className="block text-sm font-medium text-[var(--secondary)] mb-1">Passcode</label>
+            <input
+              type="password"
+              name="password"
+              placeholder="••••••••"
+              value={form.password}
+              onChange={handleChange}
+              className="form-control"
+            />
+          </div>
+
+          <button
+            type="submit"
+            className="btn btn-portal w-full mt-4 text-lg"
+          >
+            Open Portal
+          </button>
+        </form>
+
+        <div className="mt-6 text-center text-sm text-muted">
+          New to this dimension?{' '}
+          <a href="/register" className="text-[var(--primary)] hover:underline font-bold">
+            Register Identity
+          </a>
+        </div>
+      </div>
+    </div>
   );
 }

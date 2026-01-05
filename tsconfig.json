@@ -5,8 +5,8 @@
       "dom",
       "esnext"
     ],
-    "strict": false,
-    "noImplicitAny": false,
+    "strict": true,
+    "noImplicitAny": true,
     "module": "esnext",
     "moduleResolution": "bundler",
     "jsx": "preserve",

@@ -9,19 +9,15 @@ export default function StatsCard({
   value,
   variant = 'default',
 }: StatsCardProps) {
-  const colorMap = {
-    success: 'text-success',
-    danger: 'text-danger',
-    warning: 'text-warning',
-    default: 'text-dark',
-  };
-
   return (
-    <div className="card text-center p-3 shadow-sm">
-      <h6>{title}</h6>
-      <p className={`fw-bold ${colorMap[variant]}`}>
+    <div className={`stat-card ${variant}`}>
+      <h6 className="text-muted uppercase text-xs tracking-wider font-bold mb-2">{title}</h6>
+      <div className={`stat-value ${variant === 'success' ? 'text-portal' :
+          variant === 'danger' ? 'text-danger' :
+            variant === 'warning' ? 'text-warning' : 'text-foreground'
+        }`}>
         {value}
-      </p>
+      </div>
     </div>
   );
 }

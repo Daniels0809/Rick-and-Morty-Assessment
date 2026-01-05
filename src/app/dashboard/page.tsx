@@ -1,208 +1,179 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-
-interface Character {
-  id: number;
-  name: string;
-  status: string;
-  species: string;
-  image: string;
-}
-
-interface ApiResponse {
-  results: Character[];
-}
+import { useEffect, useState, useCallback } from 'react';
+import { getCharacters } from '@/services/api';
+import { Character } from '@/types';
+import CharacterCard from '@/components/CharacterCard';
+import StatsCard from '@/components/StatsCard';
+import DashboardHeader from '@/components/DashboardHeader';
+import FiltersPanel from '@/components/FiltersPanel';
+import LoadingState from '@/components/LoadingState';
+import { useDebounce } from '@/utils/hooks';
+import { useRouter } from 'next/navigation';
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [characters, setCharacters] = useState<Character[]>([]);
-  const [filteredCharacters, setFilteredCharacters] = useState<Character[]>([]);
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<Character['status'] | 'all'>('all');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalResults, setTotalResults] = useState(0);
 
-  
-  const [stats, setStats] = useState<any>({});
+  const debouncedSearch = useDebounce(search, 500);
 
-  useEffect(() => {
-    fetchCharacters();
-  }, []);
-
-  const fetchCharacters = async () => {
+  const fetchCharacters = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch('https://rickandmortyapi.com/api/character');
-      const data: ApiResponse = await response.json();
+      setError(null);
+      console.log('Fetching characters...', { page, search: debouncedSearch, status: statusFilter });
 
-      setCharacters(data.results);
-      setFilteredCharacters(data.results);
-      calculateStats(data.results);
-    } catch (err: any) {
-      setError(err.message || 'Error inesperado');
+      const response = await getCharacters({
+        page,
+        name: debouncedSearch,
+        status: statusFilter === 'all' ? '' : statusFilter,
+      });
+
+      console.log('API Response:', response);
+
+      if (response && response.results) {
+        setCharacters(response.results);
+        setTotalPages(response.info?.pages || 0);
+        setTotalResults(response.info?.count || 0);
+      } else {
+        setCharacters([]);
+        setTotalPages(0);
+        setTotalResults(0);
+      }
+    } catch (err: unknown) {
+      console.error('Fetch Error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Error al conectar con la Ciudadela';
+      setError(errorMessage);
+      setCharacters([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, debouncedSearch, statusFilter]);
 
-  const calculateStats = (list: Character[]) => {
-    const alive = list.filter(c => c.status === 'Alive').length;
-    const dead = list.filter(c => c.status === 'Dead').length;
-    const unknown = list.filter(c => c.status === 'unknown').length;
+  // Auth & Initial Fetch
+  useEffect(() => {
+    const auth = localStorage.getItem('isAuthenticated');
+    console.log('Auth check in Dashboard:', auth);
 
-    setStats({
-      total: list.length,
-      alive,
-      dead,
-      unknown,
-    });
-  };
+    if (auth !== 'true') {
+      console.log('User not authenticated, redirecting to login...');
+      router.push('/login');
+      return;
+    }
+
+    fetchCharacters();
+  }, [fetchCharacters, router]);
 
   useEffect(() => {
-    let temp = [...characters];
+    setPage(1);
+  }, [debouncedSearch, statusFilter]);
 
-    if (search) {
-      temp = temp.filter(c =>
-        c.name.toLowerCase().includes(search.toLowerCase())
-      );
-    }
+  const stats = {
+    total: characters.length,
+    alive: characters.filter(c => c.status === 'Alive').length,
+    dead: characters.filter(c => c.status === 'Dead').length,
+    unknown: characters.filter(c => c.status === 'unknown').length,
+  };
 
-    if (statusFilter !== 'all') {
-      temp = temp.filter(c => c.status === statusFilter);
-    }
-
-    setFilteredCharacters(temp);
-  }, [search, statusFilter, characters]);
-
-  
-  const totalCharacters = useMemo(() => {
-    return filteredCharacters.length;
-  }, [filteredCharacters]);
-
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-screen">
-        <span className="spinner-border text-primary"></span>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="alert alert-danger m-4">
-        <strong>Error:</strong> {error}
-      </div>
-    );
-  }
+  const handleLogout = () => {
+    localStorage.removeItem('isAuthenticated');
+    localStorage.removeItem('currentUser');
+    window.dispatchEvent(new Event("auth-update"));
+    router.push('/login');
+  };
 
   return (
-    <div className="container-fluid p-4">
-      <h1 className="mb-4 text-2xl font-bold">Dashboard de Personajes</h1>
+    <div className="dashboard-container">
+      <aside className="dashboard-sidebar">
+        <FiltersPanel
+          search={search}
+          status={statusFilter}
+          onSearchChange={setSearch}
+          onStatusChange={setStatusFilter}
+        />
 
-      {/* Estadísticas */}
-      <div className="row mb-4">
-        <div className="col-md-3">
-          <div className="card text-center p-3 shadow-sm">
-            <h6>Total</h6>
-            <p className="fw-bold">{stats.total}</p>
+        <div className="mt-8 p-4 rounded-xl bg-black/20 border border-white/5">
+          <p className="text-[10px] text-[var(--secondary)] font-black uppercase tracking-widest mb-1">Sector 7-G</p>
+          <p className="text-xs text-zinc-400">Dimensión actual: C-137</p>
+        </div>
+
+        <button
+          onClick={handleLogout}
+          className="px-6 py-3 rounded-xl bg-zinc-800 text-zinc-400 text-xs font-bold uppercase tracking-widest hover:bg-[var(--danger)] hover:text-white transition-all mt-8 w-full"
+        >
+          Close Session
+        </button>
+      </aside>
+
+      <main className="dashboard-content">
+        <DashboardHeader
+          title="Multiverse Registry"
+          subtitle="Real-time monitoring of interdimensional entities"
+        />
+
+        <div className="stats-grid">
+          <StatsCard title="Found" value={stats.total} variant="default" />
+          <StatsCard title="Active" value={stats.alive} variant="success" />
+          <StatsCard title="Terminated" value={stats.dead} variant="danger" />
+          <StatsCard title="Unknown" value={stats.unknown} variant="warning" />
+        </div>
+
+        <div className="mb-6 flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-zinc-500">
+          <div>
+            Total Matches: <span className="text-[var(--primary)]">{totalResults}</span>
+          </div>
+          <div>
+            Page {page} / {totalPages}
           </div>
         </div>
-        <div className="col-md-3">
-          <div className="card text-center p-3 shadow-sm">
-            <h6>Alive</h6>
-            <p className="fw-bold text-success">{stats.alive}</p>
-          </div>
-        </div>
-        <div className="col-md-3">
-          <div className="card text-center p-3 shadow-sm">
-            <h6>Dead</h6>
-            <p className="fw-bold text-danger">{stats.dead}</p>
-          </div>
-        </div>
-        <div className="col-md-3">
-          <div className="card text-center p-3 shadow-sm">
-            <h6>Unknown</h6>
-            <p className="fw-bold text-warning">{stats.unknown}</p>
-          </div>
-        </div>
-      </div>
 
-      {/* Filtros */}
-      <div
-        className="mb-4 p-3 rounded"
-        style={{ backgroundColor: '#f8f9fa' }} 
-      >
-        <div className="row g-2">
-          <div className="col-md-6">
-            <input
-              type="text"
-              className="form-control"
-              placeholder="Buscar personaje..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
+        {loading ? (
+          <LoadingState />
+        ) : error ? (
+          <div className="p-10 text-center rounded-2xl bg-red-900/20 border border-red-500/20 text-red-500 font-bold uppercase tracking-widest text-sm">
+            {error}
           </div>
-
-          <div className="col-md-4">
-            <select
-              className="form-select"
-              value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value)}
-            >
-              <option value="all">Todos</option>
-              <option value="Alive">Alive</option>
-              <option value="Dead">Dead</option>
-              <option value="unknown">Unknown</option>
-            </select>
+        ) : characters.length === 0 ? (
+          <div className="p-10 text-center rounded-2xl bg-zinc-900/50 border border-white/5 text-zinc-500 uppercase tracking-widest text-sm">
+            No entities detected in this coordinate range.
           </div>
-
-          <div className="col-md-2 d-flex align-items-center">
-            <span className="text-muted">
-              Total visibles: {totalCharacters}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Lista */}
-      <div className="row">
-        {filteredCharacters.map(character => (
-          <div key={character.id} className="col-md-3 mb-4">
-            <div className="card h-100 shadow-sm">
-              <img
-                src={character.image}
-                alt={character.name}
-                className="card-img-top"
-              />
-              <div className="card-body">
-                <h5 className="card-title">{character.name}</h5>
-                <p className="card-text">
-                  <span
-                    className={`badge ${
-                      character.status === 'Alive'
-                        ? 'bg-success'
-                        : character.status === 'Dead'
-                        ? 'bg-danger'
-                        : 'bg-secondary'
-                    }`}
-                  >
-                    {character.status}
-                  </span>
-                </p>
-                <p className="text-sm text-gray-500">
-                  Especie: {character.species}
-                </p>
-              </div>
+        ) : (
+          <>
+            <div className="card-grid">
+              {characters.map((character) => (
+                <CharacterCard key={character.id} character={character} />
+              ))}
             </div>
-          </div>
-        ))}
-      </div>
 
-      {filteredCharacters.length === 0 && (
-        <div className="alert alert-info mt-4">
-          No se encontraron resultados.
-        </div>
-      )}
+            {totalPages > 1 && (
+              <div className="flex justify-center gap-4 mt-12 pb-10">
+                <button
+                  className="px-8 py-3 rounded-full bg-zinc-800 text-white text-[10px] font-black uppercase tracking-widest hover:bg-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                  disabled={page <= 1}
+                  onClick={() => setPage(p => p - 1)}
+                >
+                  Prev Dim
+                </button>
+
+                <button
+                  className="px-8 py-3 rounded-full bg-[var(--primary)] text-black text-[10px] font-black uppercase tracking-widest hover:scale-105 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-[0_0_20px_rgba(151,206,76,0.2)]"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage(p => p + 1)}
+                >
+                  Next Dim
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </main>
     </div>
   );
 }
